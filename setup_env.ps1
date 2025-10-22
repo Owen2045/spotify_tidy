@@ -86,3 +86,6 @@ Write-Host 'done'
 Write-Host ("code folder {0}" -f $codeDir)
 Write-Host ("venv folder {0}" -f $venvDir)
 Write-Host ('activate venv .\{0}\Scripts\Activate.ps1' -f $venvName)
+
+Set-Location $codeDir
+Write-Host ("current directory changed to {0}" -f (Get-Location))
