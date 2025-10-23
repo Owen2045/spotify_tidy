@@ -1,15 +1,38 @@
 import os
 import time
-from typing import List, Dict, Optional
+import spotipy
+import time
 
-from fastapi import FastAPI, Request
+from typing import List, Dict, Optional, Annotated
+from pydantic import BaseModel, Field, StringConstraints
+
+
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+
+from pathlib import Path
 from dotenv import load_dotenv
-import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+
+BASE_DIR = Path(__file__).resolve().parent
+
+app = FastAPI()
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+
+TrackURI = Annotated[str, StringConstraints(pattern=r"^spotify:track:[A-Za-z0-9]{22}$")]
+TrackID  = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9]{22}$")]
+
+class UrisPayload(BaseModel):
+    uris: List[TrackURI] = Field(min_length=1)
+
+class IdsPayload(BaseModel):
+    ids: List[TrackID] = Field(min_length=1)
+        
 
 # 基本設定
 load_dotenv()
@@ -84,7 +107,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
-# 頁面
+# 首頁
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -134,6 +157,7 @@ def playlists():
     return [{"name": p["name"], "id": p["id"]} for p in items]
 
 
+# API 指定播放清單拿歌曲
 @app.get("/api/playlist/{pid}/tracks")
 def playlist_tracks(pid: str):
     sp = ensure_spotify()
@@ -143,16 +167,15 @@ def playlist_tracks(pid: str):
     while True:
         for it in page["items"]:
             t = it.get("track")
-            if t:
-                out.append(
-                    {
-                        "id": t["id"],
-                        "uri": t["uri"],
-                        "name": t["name"],
-                        "artists": ", ".join(a["name"] for a in t["artists"]),
-                        "album": t["album"]["name"],
-                    }
-                )
+            out.append(
+                {
+                    "id": t["id"],
+                    "uri": t["uri"],
+                    "name": t["name"],
+                    "artists": ", ".join(a["name"] for a in t["artists"]),
+                    "album": t["album"]["name"],
+                }
+            )
         if page.get("next"):
             page = sp.next(page)
         else:
@@ -160,24 +183,21 @@ def playlist_tracks(pid: str):
     return out
 
 
+# API 播放清單新增
 @app.post("/api/playlist/{pid}/add")
-async def playlist_add(pid: str, body: Dict):
+def playlist_add(pid: str, payload: UrisPayload):
     sp = ensure_spotify()
-    uris: List[str] = body.get("uris", [])
-    for i in range(0, len(uris), 100):
-        sp.playlist_add_items(pid, uris[i : i + 100])
-        time.sleep(0.2)
-    return {"ok": True}
+    sp.playlist_add_items(pid, payload.uris)
+    return {"added": len(payload.uris)}
 
 
+# API 播放清單移除
 @app.post("/api/playlist/{pid}/remove")
-async def playlist_remove(pid: str, body: Dict):
+def playlist_remove(pid: str, payload: UrisPayload):
     sp = ensure_spotify()
-    uris: List[str] = body.get("uris", [])
-    for i in range(0, len(uris), 100):
-        sp.playlist_remove_all_occurrences_of_items(pid, uris[i : i + 100])
-        time.sleep(0.2)
-    return {"ok": True}
+    sp.playlist_remove_all_occurrences_of_items(pid, payload.uris)
+    return {"removed": len(payload.uris)}
+
 
 
 # API 已按讚
@@ -198,29 +218,35 @@ def liked():
                     "name": t["name"],
                     "artists": ", ".join(a["name"] for a in t["artists"]),
                     "album": t["album"]["name"],
+                    "is_playable": t["is_playable"],
+                    "release_date": t["album"]["release_date"],
+                    
                 }
             )
-        if len(items) < limit:
-            break
-        offset += 50
+        # if len(items) < limit:
+        #     break
+        # offset += 50
+        break
     return out
 
 
+
+# 已按讚新增
 @app.post("/api/liked/add")
 async def liked_add(body: Dict):
     sp = ensure_spotify()
     ids: List[str] = body.get("ids", [])
-    for i in range(0, len(ids), 50):
-        sp.current_user_saved_tracks_add(tracks=ids[i : i + 50])
-        time.sleep(0.2)
+    print("api /api/liked/add")
+    print(ids)
+
+    # for i in range(0, len(ids), 50):
+    #     sp.current_user_saved_tracks_add(tracks=ids[i : i + 50])
+    #     time.sleep(0.2)
     return {"ok": True}
 
 
-@app.post("/api/liked/remove")
-async def liked_remove(body: Dict):
+# 已按讚移除
+def liked_remove(payload: IdsPayload):
     sp = ensure_spotify()
-    ids: List[str] = body.get("ids", [])
-    for i in range(0, len(ids), 50):
-        sp.current_user_saved_tracks_delete(tracks=ids[i : i + 50])
-        time.sleep(0.2)
-    return {"ok": True}
+    sp.current_user_saved_tracks_delete(tracks=payload.ids)
+    return {"removed": len(payload.ids)}
