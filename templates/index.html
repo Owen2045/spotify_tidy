@@ -17,6 +17,11 @@
       href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css"
     />
 
+    <!-- AG Grid 社群版（Alpine 主題） -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-alpine.css">
+
+
     <style>
       body { padding: 16px; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -72,6 +77,21 @@
         <button id="btn-login" class="btn btn-success me-2">登入 Spotify</button>
         <button id="btn-refresh-pl" class="btn btn-outline-secondary">刷新播放清單</button>
       </div>
+
+      <hr class="my-3" />
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-2">
+            <div class="me-auto fw-bold">AG Grid Demo（已按讚清單）</div>
+            <input id="gridQuick" class="form-control form-control-sm" placeholder="快速搜尋（全欄位）" style="width: 220px;">
+            <button id="gridReset" class="btn btn-outline-secondary btn-sm ms-2">重置篩選</button>
+          </div>
+          <div id="agLikedDemo" class="ag-theme-alpine" style="height:520px"></div>
+        </div>
+      </div>
+
+
+
 
       <!-- 🔧 三面板（Split.js 會自動產生分隔線） -->
       <div id="tripanel">
@@ -203,6 +223,10 @@
 
     <!-- Split.js（處理三面板拖曳） -->
     <script src="https://unpkg.com/split.js/dist/split.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.noStyle.js"></script>
+    <script src="/static/js/aggrid.demo.js"></script>
+
 
     <!-- Controller 與啟動 -->
     <script src="/static/js/controller.js"></script>
