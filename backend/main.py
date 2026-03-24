@@ -8,9 +8,8 @@ from pydantic import BaseModel, Field, StringConstraints
 
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 
 from pathlib import Path
@@ -20,8 +19,16 @@ from spotipy.oauth2 import SpotifyOAuth
 BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# 設定 CORS 允許 Vite 等前端框架跨域連線
+FRONTEND_URL = os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:5173")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[FRONTEND_URL],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 TrackURI = Annotated[str, StringConstraints(pattern=r"^spotify:track:[A-Za-z0-9]{22}$")]
@@ -101,16 +108,7 @@ def ensure_spotify() -> spotipy.Spotify:
     return _sp
 
 
-# FastAPI 設定
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
-
-
-# 首頁
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# FastAPI 原首頁與靜態檔已拔除，相關畫面展示皆交由 React Frontend 管理。
 
 
 # OAuth
@@ -124,10 +122,12 @@ def login():
 def callback(code: str = "", error: str = ""):
     global _sp
     if error:
-        return HTMLResponse(f"授權失敗: {error}", status_code=400)
+        return JSONResponse({"error": f"授權失敗: {error}"}, status_code=400)
     token_info = sp_oauth.get_access_token(code, as_dict=True)
     _sp = spotipy.Spotify(auth=token_info["access_token"])
-    return RedirectResponse("/")
+    
+    # 登入成功後，將畫面導向回 React 前端
+    return RedirectResponse(FRONTEND_URL)
 
 
 # API 基本資訊
@@ -186,17 +186,21 @@ def playlist_tracks(pid: str):
 # API 播放清單新增
 @app.post("/api/playlist/{pid}/add")
 def playlist_add(pid: str, payload: UrisPayload):
-    sp = ensure_spotify()
-    sp.playlist_add_items(pid, payload.uris)
-    return {"added": len(payload.uris)}
+    # sp = ensure_spotify()
+    # sp.playlist_add_items(pid, payload.uris)
+    print(f"MOCK API: [POST] /api/playlist/{pid}/add")
+    print(f"Payload URIs: {payload.uris}")
+    return {"added": len(payload.uris), "status": "mocked"}
 
 
 # API 播放清單移除
 @app.post("/api/playlist/{pid}/remove")
 def playlist_remove(pid: str, payload: UrisPayload):
-    sp = ensure_spotify()
-    sp.playlist_remove_all_occurrences_of_items(pid, payload.uris)
-    return {"removed": len(payload.uris)}
+    # sp = ensure_spotify()
+    # sp.playlist_remove_all_occurrences_of_items(pid, payload.uris)
+    print(f"MOCK API: [POST] /api/playlist/{pid}/remove")
+    print(f"Payload URIs: {payload.uris}")
+    return {"removed": len(payload.uris), "status": "mocked"}
 
 
 
@@ -235,19 +239,18 @@ def liked():
 # 已按讚新增
 @app.post("/api/liked/add")
 async def liked_add(body: Dict):
-    sp = ensure_spotify()
+    # sp = ensure_spotify()
     ids: List[str] = body.get("ids", [])
-    print("api /api/liked/add")
-    print(ids)
-
-    # for i in range(0, len(ids), 50):
-    #     sp.current_user_saved_tracks_add(tracks=ids[i : i + 50])
-    #     time.sleep(0.2)
-    return {"ok": True}
+    print("MOCK API: [POST] /api/liked/add")
+    print(f"Payload IDs: {ids}")
+    return {"ok": True, "added": len(ids), "status": "mocked"}
 
 
 # 已按讚移除
+@app.post("/api/liked/remove")
 def liked_remove(payload: IdsPayload):
-    sp = ensure_spotify()
-    sp.current_user_saved_tracks_delete(tracks=payload.ids)
-    return {"removed": len(payload.ids)}
+    # sp = ensure_spotify()
+    # sp.current_user_saved_tracks_delete(tracks=payload.ids)
+    print("MOCK API: [POST] /api/liked/remove")
+    print(f"Payload IDs: {payload.ids}")
+    return {"removed": len(payload.ids), "status": "mocked"}

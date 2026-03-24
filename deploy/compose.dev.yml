@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: spotify_frontend_dev
+    ports:
+      - "5173:5173"
+    volumes:
+      # 將本機的 frontend 資料夾原始碼掛載進去，支援 Hot Reload
+      - ../frontend:/app
+      # 保護容器內的 node_modules 不被本機覆蓋 (這在雙軌制中極度重要)
+      - /app/node_modules
+    environment:
+      # 告訴 Vite React 前端，API Server 的位置在哪裡
+      - VITE_API_URL=http://localhost:8000/api
+    # 保護機制：若掛載後發現毫無套件，先裝套件再跑伺服器
+    command: >
+      sh -c "if [ ! -d 'node_modules' ] && [ -f 'package.json' ]; then npm install; fi && npm run dev -- --host 0.0.0.0"
+    restart: unless-stopped
+    networks:
+      - dev-network
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: spotify_backend_dev
+    ports:
+      - "8000:8000"
+    volumes:
+      # 將本機的 backend 資料夾原始碼掛載進去，支援 uvicorn --reload
+      - ../backend:/app
+    env_file:
+      - .env.dev
+    # 保護機制：確保啟動前 requirements有安裝，順便執行 hot-reload 啟動
+    command: >
+      sh -c "if [ -f requirements.txt ]; then pip install -r requirements.txt; fi && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+    networks:
+      - dev-network
+
+networks:
+  dev-network:
+    driver: bridge
