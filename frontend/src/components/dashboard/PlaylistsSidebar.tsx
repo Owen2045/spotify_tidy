@@ -1,6 +1,7 @@
+"use client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import type { Playlist } from "@/pages/Dashboard"
+import type { Playlist } from "@/app/page"
 
 interface Props {
   playlists: Playlist[];
@@ -16,10 +17,7 @@ export function PlaylistsSidebar({ playlists, leftPlaylist, rightPlaylist, activ
       <CardHeader className="py-2 px-4 flex-none border-b mb-2 bg-muted/10">
         <CardTitle className="text-base flex items-center justify-between">
           <span className="text-secondary-foreground font-bold">
-            選擇欲操作的實體清單 (寫入對象：{activePanel === "left" ? "🟢 左側面板" : "🟢 右側面板"})
-          </span>
-          <span className="text-[12px] font-normal text-muted-foreground bg-muted px-2 py-1 rounded">
-            提示：點擊下方按鈕，資料即同步注入外框亮起的焦點面板
+            選擇清單 (寫入對象：{activePanel === "left" ? "🟢 左側面板" : "🟢 右側面板"})
           </span>
         </CardTitle>
       </CardHeader>
@@ -35,21 +33,27 @@ export function PlaylistsSidebar({ playlists, leftPlaylist, rightPlaylist, activ
               const isRight = rightPlaylist?.id === p.id;
               let variant: "default" | "secondary" | "outline" | "ghost" = "outline";
               let ring = "";
-              
+
               if (isLeft && isRight) { variant = "default"; }
               else if (isLeft) { variant = "default"; }
               else if (isRight) { variant = "secondary"; }
               else { variant = "outline"; }
-              
-              if (p.id === "liked") ring = "border-primary/50 text-primary font-bold shadow-sm";
-              
+
+              if (p.id === "liked") {
+                ring = "border-primary/50 font-bold shadow-sm";
+                // 若被選中 (variant === "default") 會自帶白字，因此我們不硬塞 text-primary 蓋掉它
+                if (variant !== "default") {
+                  ring += " text-primary";
+                }
+              }
+
               return (
                 <Button
                   key={p.id}
                   variant={variant}
                   size="sm"
                   onClick={() => onSelect(p)}
-                  className={`truncate max-w-[250px] ${ring}`}
+                  className={`justify-start truncate max-w-[250px] ${ring}`}
                 >
                   {isLeft && "←左: "}{isRight && "右→: "}{p.name}
                 </Button>

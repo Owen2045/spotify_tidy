@@ -1,3 +1,4 @@
+"use client"
 import { useEffect, useState } from "react"
 import {
   ColumnDef,
@@ -17,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { API_BASE, type Playlist } from "@/pages/Dashboard"
+import { API_BASE, type Playlist } from "@/app/page"
 
 export type TrackItem = {
   id: string
@@ -164,7 +165,7 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
       body: JSON.stringify(payload)
     }).then(res => res.json()).then(resData => {
       console.log(`MOCK API 移除 (來源: ${playlist.name})`, payload, "回應:", resData)
-      
+
       if (playlist.id === "liked") {
         setData(prev => prev.filter(t => !keysToRemove.includes(t.id)))
       } else {
@@ -193,13 +194,13 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
   const emptyRows = records.length > 0 ? Math.max(0, pageSize - records.length) : pageSize - 1
 
   return (
-    <Card 
+    <Card
       onClick={onClick}
       className={`flex-1 overflow-hidden shadow-sm h-full flex flex-col transition-all cursor-default ${isActive ? "border-primary border-2 shadow-md bg-card" : "border-border bg-muted/20 opacity-80"} `}
     >
       <CardHeader className="flex flex-row items-center justify-between pb-2 pt-3 px-4 flex-none border-b">
         <CardTitle className={`text-base flex items-center ${isActive ? "text-primary font-black" : "text-muted-foreground font-bold"}`}>
-          {isActive ? "🔵 活動中：" : "⚪ 備選中："}
+          {isActive ? "🔵 選中：" : "⚪ 待選："}
           {playlist ? playlist.name : "請於上方點選清單"}
         </CardTitle>
         <div className="flex gap-2">
@@ -209,24 +210,26 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 flex-1 overflow-y-auto pt-3 px-3">
-        <div className={`flex w-full items-center gap-2 h-[45px] p-2 rounded-md border ${isActive ? "bg-muted/80 shadow-inner" : "bg-transparent"}`}>
-          <Button 
-            size="sm" 
-            className="flex-1 transition-all" 
-            disabled={!targetPlaylist || Object.keys(rowSelection).length === 0} 
+      <CardContent className="flex flex-col flex-1 overflow-hidden pt-3 px-3 gap-3">
+        {/* 固定在最方的操作按鈕 */}
+        <div className={`flex-none flex w-full items-center gap-2 h-[45px] p-2 rounded-md border ${isActive ? "bg-muted/80 shadow-inner" : "bg-transparent"}`}>
+          <Button
+            size="sm"
+            className="flex-1 transition-all"
+            disabled={!targetPlaylist || Object.keys(rowSelection).length === 0}
             onClick={handleTransfer}
           >
-            {side === "left" ? "→ 寫入至右側面板" : "← 寫入至左側面板"}
-            {targetPlaylist && ` [${targetPlaylist.name.slice(0,9)}...]`}
+            {side === "left" ? "→ 新增至右側" : "← 新增至左側"}
+            {targetPlaylist && ` [${targetPlaylist.name.slice(0, 9)}...]`}
           </Button>
-          
+
           <Button variant="destructive" size="sm" className="min-w-[80px]" disabled={Object.keys(rowSelection).length === 0} onClick={handleDelete}>
-             🗑️ 拋棄
+            🗑️ 拋棄
           </Button>
         </div>
 
-        <div className="rounded-md border overflow-hidden">
+        {/* 中間可以自由滾動的表格區域 */}
+        <div className="flex-1 rounded-md border overflow-y-auto relative min-h-0">
           <Table className="table-fixed w-full">
             <TableHeader className="bg-muted/50">
               {table.getHeaderGroups().map((headerGroup) => (
@@ -269,7 +272,8 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
           </Table>
         </div>
 
-        <div className="flex items-center justify-end space-x-2 pb-2">
+        {/* 固定在最下方的分頁區塊 */}
+        <div className="flex-none flex items-center justify-end space-x-2 pb-2 mt-auto pt-1 border-t border-transparent">
           <div className="flex-1 text-[11px] text-muted-foreground font-mono">
             選:{Object.keys(rowSelection).length} / 尋:{table.getFilteredRowModel().rows.length} / 總:{data.length}
           </div>

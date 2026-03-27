@@ -1,10 +1,11 @@
+"use client"
 import { useEffect, useState } from "react"
 import Split from "react-split"
 import { Header } from "@/components/layout/Header"
 import { PlaylistsSidebar } from "@/components/dashboard/PlaylistsSidebar"
 import { PlaylistPanel } from "@/components/dashboard/PlaylistPanel"
 
-export const API_BASE = "http://localhost:8000"
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
 
 export type Playlist = {
   id: string
@@ -13,14 +14,14 @@ export type Playlist = {
 
 export const LIKED_PLAYLIST: Playlist = {
   id: "liked",
-  name: "⭐ 我的按讚最愛庫"
+  name: "⭐ 我的歌單"
 }
 
-export function Dashboard() {
+export default function Dashboard() {
   const [user, setUser] = useState<{ display_name?: string } | null>(null)
-  
+
   const [playlists, setPlaylists] = useState<Playlist[]>([])
-  
+
   // 雙開管理員共用狀態
   const [leftPlaylist, setLeftPlaylist] = useState<Playlist | null>(null)
   const [rightPlaylist, setRightPlaylist] = useState<Playlist | null>(null)
@@ -69,14 +70,14 @@ export function Dashboard() {
         <Header user={user} onLogin={handleLogin} onRefresh={fetchPlaylists} />
         <hr className="my-3 border-border" />
       </div>
-      
+
       <div className="mb-3 flex-none">
-        <PlaylistsSidebar 
-          playlists={[LIKED_PLAYLIST, ...playlists]} 
+        <PlaylistsSidebar
+          playlists={[LIKED_PLAYLIST, ...playlists]}
           leftPlaylist={leftPlaylist}
           rightPlaylist={rightPlaylist}
-          activePanel={activePanel} 
-          onSelect={handleSelectPlaylist} 
+          activePanel={activePanel}
+          onSelect={handleSelectPlaylist}
         />
       </div>
 
@@ -94,22 +95,22 @@ export function Dashboard() {
         className="flex flex-1 gap-4 overflow-hidden"
       >
         <div className="flex h-full flex-col overflow-hidden rounded-md">
-          <PlaylistPanel 
-             side="left" 
-             isActive={activePanel === "left"} 
-             playlist={leftPlaylist} 
-             targetPlaylist={rightPlaylist}
-             onClick={() => setActivePanel("left")}
-           />
+          <PlaylistPanel
+            side="left"
+            isActive={activePanel === "left"}
+            playlist={leftPlaylist}
+            targetPlaylist={rightPlaylist}
+            onClick={() => setActivePanel("left")}
+          />
         </div>
         <div className="flex h-full flex-col overflow-hidden rounded-md">
-          <PlaylistPanel 
-             side="right" 
-             isActive={activePanel === "right"} 
-             playlist={rightPlaylist} 
-             targetPlaylist={leftPlaylist}
-             onClick={() => setActivePanel("right")}
-           />
+          <PlaylistPanel
+            side="right"
+            isActive={activePanel === "right"}
+            playlist={rightPlaylist}
+            targetPlaylist={leftPlaylist}
+            onClick={() => setActivePanel("right")}
+          />
         </div>
       </Split>
     </div>

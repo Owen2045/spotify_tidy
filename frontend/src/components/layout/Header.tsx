@@ -1,3 +1,4 @@
+"use client"
 import { Button } from "@/components/ui/button"
 
 interface HeaderProps {
@@ -9,7 +10,7 @@ interface HeaderProps {
 export function Header({ user, onLogin, onRefresh }: HeaderProps) {
   return (
     <div className="mb-4 flex items-center justify-between">
-      <h3 className="text-2xl font-bold tracking-tight">Spotify 智能代理工具</h3>
+      <h3 className="text-2xl font-bold tracking-tight">Spotify 歌單整理</h3>
       <div className="flex items-center gap-4">
         {!user ? (
           <Button onClick={onLogin} variant="default">

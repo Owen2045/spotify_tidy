@@ -41,8 +41,10 @@ class IdsPayload(BaseModel):
     ids: List[TrackID] = Field(min_length=1)
         
 
-# 基本設定
-load_dotenv()
+# 基本設定：集中向 deploy 目錄讀取本機機密變數 (Docker 模式下此步為備援，不影響 compose 外部變數注入)
+dotenv_path = BASE_DIR.parent / "deploy" / ".env.dev"
+if dotenv_path.exists():
+    load_dotenv(dotenv_path=dotenv_path)
 SCOPES = " ".join(
     [
         "playlist-read-private",
@@ -59,7 +61,7 @@ REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI") or "http://localhost:8765/callb
 CACHE_PATH = ".cache-web"
 
 if not CLIENT_ID or not CLIENT_SECRET:
-    raise RuntimeError("請在 .env 設定 SPOTIPY_CLIENT_ID 與 SPOTIPY_CLIENT_SECRET")
+    raise RuntimeError("請在 deploy/.env.dev 確實設定 SPOTIPY_CLIENT_ID 與 SPOTIPY_CLIENT_SECRET")
 
 sp_oauth = SpotifyOAuth(
     client_id=CLIENT_ID,
