@@ -46,3 +46,6 @@ build/
 .vercel/
 *.tsbuildinfo
 next-env.d.ts
+
+Conception
+.claude/
