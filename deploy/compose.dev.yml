@@ -26,28 +26,6 @@ services:
       - "traefik.http.routers.frontend.entrypoints=web"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
-  backend:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    container_name: spotify_backend_dev
-    ports:
-      - "8000:8000"
-    volumes:
-      # 將本機的 backend 資料夾原始碼掛載進去，支援 uvicorn --reload
-      - ../backend:/app
-    env_file:
-      - .env.dev
-    environment:
-      # 告訴 FastAPI 後端，允許來自遠端機器的前端存取 (CORS)
-      - BACKEND_CORS_ORIGINS=http://localhost:3000
-    # 保護機制：確保啟動前 requirements有安裝，順便執行 hot-reload 啟動
-    command: >
-      sh -c "if [ -f requirements.txt ]; then pip install -r requirements.txt; fi && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-    restart: unless-stopped
-    networks:
-      - dev-network
-
   traefik:
     image: traefik:v3.0
     container_name: spotify_traefik_dev
