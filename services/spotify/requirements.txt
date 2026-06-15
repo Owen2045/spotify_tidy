@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+spotipy
+requests
+python-jose[cryptography]
+python-dotenv
+pydantic

@@ -27,7 +27,8 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { API_BASE, type Playlist } from "@/app/page"
+import { fetchWithAuth } from "@/lib/auth"
+import { type Playlist } from "@/app/page"
 
 export type TrackItem = {
   id: string
@@ -140,8 +141,8 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
   const loadTracks = () => {
     if (!playlist) return
     setIsLoading(true)
-    const endpoint = playlist.id === "liked" ? `${API_BASE}/api/liked` : `${API_BASE}/api/playlist/${playlist.id}/tracks`
-    fetch(endpoint)
+    const endpoint = playlist.id === "liked" ? `/spotify/liked` : `/spotify/playlist/${playlist.id}/tracks`
+    fetchWithAuth(endpoint)
       .then(res => res.json())
       .then(tracks => setData(tracks))
       .catch(console.error)
@@ -164,19 +165,18 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
     let endpoint = ""
     let payload = {}
     if (targetPlaylist.id === "liked") {
-      endpoint = `${API_BASE}/api/liked/add`
+      endpoint = `/spotify/liked/add`
       payload = { ids: selectedRows.map(r => r.original.id) }
     } else {
-      endpoint = `${API_BASE}/api/playlist/${targetPlaylist.id}/add`
+      endpoint = `/spotify/playlist/${targetPlaylist.id}/add`
       payload = { uris: selectedRows.map(r => r.original.uri) }
     }
 
-    fetch(endpoint, {
+    fetchWithAuth(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }).then(res => res.json()).then(resData => {
-      console.log(`MOCK API (對象: ${targetPlaylist.name})`, payload, "回應:", resData)
+      console.log(`Transfer to ${targetPlaylist.name}:`, resData)
       setRowSelection({})
     }).catch(console.error)
   }
@@ -190,22 +190,20 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
     let keysToRemove: string[] = []
 
     if (playlist.id === "liked") {
-      endpoint = `${API_BASE}/api/liked/remove`
+      endpoint = `/spotify/liked/remove`
       keysToRemove = selectedRows.map(r => r.original.id)
       payload = { ids: keysToRemove }
     } else {
-      endpoint = `${API_BASE}/api/playlist/${playlist.id}/remove`
+      endpoint = `/spotify/playlist/${playlist.id}/remove`
       keysToRemove = selectedRows.map(r => r.original.uri)
       payload = { uris: keysToRemove }
     }
 
-    fetch(endpoint, {
+    fetchWithAuth(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     }).then(res => res.json()).then(resData => {
-      console.log(`MOCK API 移除 (來源: ${playlist.name})`, payload, "回應:", resData)
-
+      console.log(`Delete from ${playlist.name}:`, resData)
       if (playlist.id === "liked") {
         setData(prev => prev.filter(t => !keysToRemove.includes(t.id)))
       } else {

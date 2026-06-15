@@ -9,7 +9,7 @@ venv*/
 
 # Environment files
 .env
-.env.*
+.env.dev
 .cache-web
 
 # IDE settings
