@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import bcrypt
@@ -123,7 +123,7 @@ def spotify_connect(user_id: str = Depends(require_auth)):
 @app.get("/auth/spotify/callback")
 def spotify_callback(code: str = "", error: str = "", state: str = ""):
     if error:
-        return JSONResponse({"error": error}, status_code=400)
+        return RedirectResponse(f"{FRONTEND_URL}/?spotify_error={error}")
 
     token_info = sp_oauth.get_access_token(code, as_dict=True, check_cache=False)
     expires_at = datetime.fromtimestamp(token_info["expires_at"], tz=timezone.utc)
@@ -143,26 +143,7 @@ def spotify_callback(code: str = "", error: str = "", state: str = ""):
                   expires_at, token_info.get("scope", "")))
             conn.commit()
 
-    return HTMLResponse(f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Spotify 連結成功</title>
-  <style>
-    body{{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#121212;color:#fff;}}
-    .box{{text-align:center;}}
-    a{{color:#1DB954;}}
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h2>✅ Spotify 連結成功！</h2>
-    <p>正在跳轉回應用程式...</p>
-    <p><a href="{FRONTEND_URL}">若未自動跳轉，請點此</a></p>
-  </div>
-  <script>window.location.replace("{FRONTEND_URL}");</script>
-</body>
-</html>""")
+    return RedirectResponse(FRONTEND_URL)
 
 
 @app.delete("/auth/spotify/disconnect")
