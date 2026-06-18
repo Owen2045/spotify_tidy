@@ -1,57 +1,38 @@
 "use client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import Split from "react-split"
 import { Header } from "@/components/layout/Header"
-import { PlaylistsSidebar } from "@/components/dashboard/PlaylistsSidebar"
-import { PlaylistPanel } from "@/components/dashboard/PlaylistPanel"
+import { Button } from "@/components/ui/button"
 import { fetchWithAuth, getToken, removeToken } from "@/lib/auth"
 
-export type Playlist = {
-  id: string
-  name: string
-}
-
-export const LIKED_PLAYLIST: Playlist = {
-  id: "liked",
-  name: "⭐ 我的歌單"
-}
-
-export default function Dashboard() {
+export default function Lobby() {
   const router = useRouter()
-  const [user, setUser] = useState<{ display_name?: string } | null>(null)
+  const [email, setEmail] = useState("")
   const [spotifyConnected, setSpotifyConnected] = useState(false)
-  const [playlists, setPlaylists] = useState<Playlist[]>([])
-  const [leftPlaylist, setLeftPlaylist] = useState<Playlist | null>(null)
-  const [rightPlaylist, setRightPlaylist] = useState<Playlist | null>(null)
-  const [activePanel, setActivePanel] = useState<"left" | "right">("left")
+  const [spotifyDisplayName, setSpotifyDisplayName] = useState("")
 
   useEffect(() => {
-    if (!getToken()) {
-      router.push("/login")
-      return
-    }
-    fetchWithAuth("/spotify/me")
+    if (!getToken()) { router.push("/login"); return }
+
+    fetchWithAuth("/auth/me")
       .then(res => {
         if (res.status === 401) { removeToken(); router.push("/login"); return null }
+        return res.json()
+      })
+      .then(data => { if (data) setEmail(data.email) })
+      .catch(() => {})
+
+    fetchWithAuth("/spotify/me")
+      .then(res => {
         if (res.status === 403) { setSpotifyConnected(false); return null }
         setSpotifyConnected(true)
         return res.json()
       })
-      .then(data => { if (data) setUser(data) })
-      .catch(() => setUser(null))
+      .then(data => { if (data?.display_name) setSpotifyDisplayName(data.display_name) })
+      .catch(() => {})
   }, [])
 
-  const fetchPlaylists = () => {
-    fetchWithAuth("/spotify/playlists")
-      .then(res => res.json())
-      .then(data => setPlaylists(data))
-      .catch(console.error)
-  }
-
-  useEffect(() => {
-    if (spotifyConnected) fetchPlaylists()
-  }, [spotifyConnected])
+  const handleLogout = () => { removeToken(); router.push("/login") }
 
   const handleConnectSpotify = async () => {
     try {
@@ -63,87 +44,32 @@ export default function Dashboard() {
     }
   }
 
-  const handleDisconnectSpotify = async () => {
-    await fetchWithAuth("/auth/spotify/disconnect", { method: "DELETE" })
-    setSpotifyConnected(false)
-    setUser(null)
-    setPlaylists([])
-    setLeftPlaylist(null)
-    setRightPlaylist(null)
-  }
-
-  const handleLogout = () => {
-    removeToken()
-    router.push("/login")
-  }
-
-  const handleSelectPlaylist = (p: Playlist) => {
-    if (activePanel === "left") setLeftPlaylist(p)
-    else setRightPlaylist(p)
-  }
-
   return (
-    <div className="min-h-screen bg-background p-4 font-sans text-foreground flex flex-col h-screen overflow-hidden">
+    <div className="min-h-screen bg-background p-4 font-sans text-foreground flex flex-col">
       <div className="flex-none">
-        <Header
-          user={user}
-          spotifyConnected={spotifyConnected}
-          onConnectSpotify={handleConnectSpotify}
-          onDisconnectSpotify={handleDisconnectSpotify}
-          onLogout={handleLogout}
-          onRefresh={fetchPlaylists}
-        />
+        <Header username={email} onLogout={handleLogout} />
         <hr className="my-3 border-border" />
       </div>
 
-      {!spotifyConnected ? (
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          請先連結 Spotify 帳號
-        </div>
-      ) : (
-        <>
-          <div className="mb-3 flex-none">
-            <PlaylistsSidebar
-              playlists={[LIKED_PLAYLIST, ...playlists]}
-              leftPlaylist={leftPlaylist}
-              rightPlaylist={rightPlaylist}
-              activePanel={activePanel}
-              onSelect={handleSelectPlaylist}
-            />
+      <div className="flex-1 p-4">
+        <h2 className="text-lg font-semibold mb-6">服務</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="border border-border rounded-lg p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-2 h-2 rounded-full ${spotifyConnected ? "bg-green-500" : "bg-muted-foreground"}`} />
+              <span className="font-medium">Spotify Tidy</span>
+            </div>
+            {spotifyConnected && spotifyDisplayName && (
+              <p className="text-sm text-muted-foreground">{spotifyDisplayName}</p>
+            )}
+            {spotifyConnected ? (
+              <Button onClick={() => router.push("/services/spotify")}>進入</Button>
+            ) : (
+              <Button onClick={handleConnectSpotify}>連結 Spotify</Button>
+            )}
           </div>
-          <Split
-            sizes={[50, 50]}
-            minSize={300}
-            expandToMin={false}
-            gutterSize={8}
-            gutterAlign="center"
-            snapOffset={30}
-            dragInterval={1}
-            direction="horizontal"
-            cursor="col-resize"
-            className="flex flex-1 gap-4 overflow-hidden"
-          >
-            <div className="flex h-full flex-col overflow-hidden rounded-md">
-              <PlaylistPanel
-                side="left"
-                isActive={activePanel === "left"}
-                playlist={leftPlaylist}
-                targetPlaylist={rightPlaylist}
-                onClick={() => setActivePanel("left")}
-              />
-            </div>
-            <div className="flex h-full flex-col overflow-hidden rounded-md">
-              <PlaylistPanel
-                side="right"
-                isActive={activePanel === "right"}
-                playlist={rightPlaylist}
-                targetPlaylist={leftPlaylist}
-                onClick={() => setActivePanel("right")}
-              />
-            </div>
-          </Split>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   )
 }

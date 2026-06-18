@@ -1,22 +1,28 @@
 import os
-import psycopg2
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
-from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, RedirectResponse
 import bcrypt
-from jose import jwt, JWTError
+from jose import JWTError, jwt
+from pydantic import BaseModel
+
+from logger import get_logger
+
+logger = get_logger()
 from spotipy.oauth2 import SpotifyOAuth
 from spotipy.cache_handler import MemoryCacheHandler
+from sqlmodel import Session, select
 from dotenv import load_dotenv
+
+from database import get_session
+from models import SpotifyToken, User
 
 load_dotenv()
 
 FRONTEND_URL  = os.getenv("FRONTEND_URL", "http://localhost:3000")
-DATABASE_URL  = os.getenv("DATABASE_URL")
 JWT_SECRET    = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = "HS256"
 
@@ -46,20 +52,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
+
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
-
-
-@contextmanager
-def get_conn():
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        yield conn
-    finally:
-        conn.close()
 
 
 def make_jwt(user_id: str) -> str:
@@ -86,103 +85,106 @@ class AuthBody(BaseModel):
 # ── 帳號系統 ──────────────────────────────────────────────
 
 @app.post("/auth/register")
-def register(body: AuthBody):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id FROM users WHERE email = %s", (body.email,))
-            if cur.fetchone():
-                raise HTTPException(status_code=409, detail="Email already registered")
-            cur.execute(
-                "INSERT INTO users (email, hashed_password) VALUES (%s, %s) RETURNING id",
-                (body.email, hash_password(body.password)),
-            )
-            user_id = str(cur.fetchone()[0])
-            conn.commit()
-    return {"user_id": user_id, "token": make_jwt(user_id)}
+def register(body: AuthBody, session: Session = Depends(get_session)):
+    existing = session.exec(select(User).where(User.email == body.email)).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    user = User(email=body.email, hashed_password=hash_password(body.password))
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {"user_id": str(user.id), "token": make_jwt(str(user.id))}
 
 
 @app.post("/auth/login")
-def login(body: AuthBody):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT id, hashed_password FROM users WHERE email = %s", (body.email,))
-            row = cur.fetchone()
-    if not row or not verify_password(body.password, row[1]):
+def login(body: AuthBody, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.email == body.email)).first()
+    if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"user_id": str(row[0]), "token": make_jwt(str(row[0]))}
+    return {"user_id": str(user.id), "token": make_jwt(str(user.id))}
 
 
 # ── Spotify OAuth 綁定 ────────────────────────────────────
 
 @app.get("/auth/spotify/connect")
 def spotify_connect(user_id: str = Depends(require_auth)):
-    # 把 user_id 塞進 state，callback 時用來識別要綁哪個帳號
     return JSONResponse({"auth_url": sp_oauth.get_authorize_url(state=user_id)})
 
 
 @app.get("/auth/spotify/callback")
-def spotify_callback(code: str = "", error: str = "", state: str = ""):
+def spotify_callback(
+    code: str = "",
+    error: str = "",
+    state: str = "",
+    session: Session = Depends(get_session),
+):
     if error:
-        return RedirectResponse(f"{FRONTEND_URL}/?spotify_error={error}")
+        return RedirectResponse(f"{FRONTEND_URL}/services/spotify?spotify_error={error}")
 
     token_info = sp_oauth.get_access_token(code, as_dict=True, check_cache=False)
     expires_at = datetime.fromtimestamp(token_info["expires_at"], tz=timezone.utc)
+    user_uuid  = UUID(state)
 
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO spotify_tokens (user_id, access_token, refresh_token, expires_at, scope)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    access_token = EXCLUDED.access_token,
-                    refresh_token = EXCLUDED.refresh_token,
-                    expires_at    = EXCLUDED.expires_at,
-                    scope         = EXCLUDED.scope,
-                    updated_at    = NOW()
-            """, (state, token_info["access_token"], token_info["refresh_token"],
-                  expires_at, token_info.get("scope", "")))
-            conn.commit()
+    existing = session.exec(
+        select(SpotifyToken).where(SpotifyToken.user_id == user_uuid)
+    ).first()
 
-    return RedirectResponse(FRONTEND_URL)
+    if existing:
+        existing.access_token  = token_info["access_token"]
+        existing.refresh_token = token_info["refresh_token"]
+        existing.expires_at    = expires_at
+        existing.scope         = token_info.get("scope", "")
+        existing.updated_at    = datetime.now(timezone.utc)
+        session.add(existing)
+    else:
+        session.add(SpotifyToken(
+            user_id=user_uuid,
+            access_token=token_info["access_token"],
+            refresh_token=token_info["refresh_token"],
+            expires_at=expires_at,
+            scope=token_info.get("scope", ""),
+        ))
+
+    session.commit()
+    return RedirectResponse(f"{FRONTEND_URL}/services/spotify")
 
 
 @app.delete("/auth/spotify/disconnect")
-def spotify_disconnect(user_id: str = Depends(require_auth)):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM spotify_tokens WHERE user_id = %s", (user_id,))
-            conn.commit()
+def spotify_disconnect(user_id: str = Depends(require_auth), session: Session = Depends(get_session)):
+    token = session.exec(
+        select(SpotifyToken).where(SpotifyToken.user_id == UUID(user_id))
+    ).first()
+    if token:
+        session.delete(token)
+        session.commit()
     return {"message": "Spotify disconnected"}
+
+
+@app.get("/auth/me")
+def me(user_id: str = Depends(require_auth), session: Session = Depends(get_session)):
+    user = session.get(User, UUID(user_id))
+    if not user:
+        raise HTTPException(status_code=404)
+    return {"email": user.email}
 
 
 # ── 內部 API（給其他 service 用，不對外暴露）──────────────
 
 @app.get("/auth/internal/token/{user_id}")
-def internal_get_spotify_token(user_id: str):
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT access_token, refresh_token, expires_at, scope FROM spotify_tokens WHERE user_id = %s",
-                (user_id,),
-            )
-            row = cur.fetchone()
+def internal_get_spotify_token(user_id: str, session: Session = Depends(get_session)):
+    token = session.exec(
+        select(SpotifyToken).where(SpotifyToken.user_id == UUID(user_id))
+    ).first()
 
-    if not row:
+    if not token:
         raise HTTPException(status_code=404, detail="Spotify not connected")
 
-    access_token, refresh_token, expires_at, scope = row
+    if token.expires_at - timedelta(seconds=60) <= datetime.now(timezone.utc):
+        refreshed            = sp_oauth.refresh_access_token(token.refresh_token)
+        token.access_token   = refreshed["access_token"]
+        token.expires_at     = datetime.fromtimestamp(refreshed["expires_at"], tz=timezone.utc)
+        token.updated_at     = datetime.now(timezone.utc)
+        session.add(token)
+        session.commit()
 
-    # Token 快過期則自動 refresh
-    if expires_at - timedelta(seconds=60) <= datetime.now(timezone.utc):
-        refreshed     = sp_oauth.refresh_access_token(refresh_token)
-        access_token  = refreshed["access_token"]
-        new_expires   = datetime.fromtimestamp(refreshed["expires_at"], tz=timezone.utc)
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE spotify_tokens SET access_token=%s, expires_at=%s, updated_at=NOW() WHERE user_id=%s",
-                    (access_token, new_expires, user_id),
-                )
-                conn.commit()
-
-    return {"access_token": access_token, "scope": scope}
+    return {"access_token": token.access_token, "scope": token.scope}

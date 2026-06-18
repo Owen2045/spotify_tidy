@@ -6,3 +6,5 @@ python-jose[cryptography]
 spotipy
 python-dotenv
 pydantic
+sqlmodel
+alembic

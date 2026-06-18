@@ -9,6 +9,10 @@ from pydantic import BaseModel, Field, StringConstraints
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
+from logger import get_logger
+
+logger = get_logger()
+
 load_dotenv()
 
 FRONTEND_URL      = os.getenv("FRONTEND_URL", "http://localhost:3000")
