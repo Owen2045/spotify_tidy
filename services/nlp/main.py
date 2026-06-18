@@ -4,12 +4,10 @@ from datetime import date, datetime, timezone
 import requests
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from openai import OpenAI
-from sqladmin import Admin, ModelView
-from sqladmin.authentication import AuthenticationBackend
-from sqlalchemy import String
+from sqlalchemy import func
 from sqlmodel import Session, col, select
-from starlette.requests import Request
 
+from admin import create_admin
 from database import engine, get_session
 from logger import get_logger
 from models import Track, TrackGenre
@@ -17,63 +15,7 @@ from models import Track, TrackGenre
 logger = get_logger()
 
 app = FastAPI()
-
-
-# ── Studio Admin ─────────────────────────────────────────────────────────────
-
-STUDIO_USER = os.getenv("STUDIO_USER", "admin")
-STUDIO_PASS = os.getenv("STUDIO_PASS", "admin")
-
-
-class BasicAuth(AuthenticationBackend):
-    async def login(self, request: Request) -> bool:
-        form = await request.form()
-        if form.get("username") == STUDIO_USER and form.get("password") == STUDIO_PASS:
-            request.session.update({"studio": "ok"})
-            return True
-        return False
-
-    async def logout(self, request: Request) -> bool:
-        request.session.clear()
-        return True
-
-    async def authenticate(self, request: Request) -> bool:
-        return request.session.get("studio") == "ok"
-
-
-class TrackAdmin(ModelView, model=Track):
-    name = "Track"
-    name_plural = "Tracks"
-    icon = "fa-solid fa-music"
-    column_list = [Track.name, Track.artist_names, Track.album_name, Track.release_date, Track.explicit, Track.added_at]
-    column_searchable_list = [Track.name]
-    column_sortable_list = [Track.name, Track.release_date, Track.added_at]
-    column_details_list = [Track.id, Track.name, Track.artist_names, Track.album_name,
-                           Track.release_date, Track.duration_ms, Track.explicit,
-                           Track.added_at, Track.description]
-    form_excluded_columns = [Track.added_at]
-    page_size = 50
-
-
-class TrackGenreAdmin(ModelView, model=TrackGenre):
-    name = "Track Genre"
-    name_plural = "Track Genres"
-    icon = "fa-solid fa-tag"
-    column_list = [TrackGenre.track_id, TrackGenre.genre, TrackGenre.source]
-    column_searchable_list = [TrackGenre.genre, TrackGenre.track_id]
-    column_sortable_list = [TrackGenre.genre, TrackGenre.source]
-    page_size = 100
-
-
-admin = Admin(
-    app,
-    engine,
-    authentication_backend=BasicAuth(secret_key=os.getenv("JWT_SECRET", "dev-secret")),
-    base_url="/studio",
-    title="Studio",
-)
-admin.add_view(TrackAdmin)
-admin.add_view(TrackGenreAdmin)
+create_admin(app)
 
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth:8001")
 SPOTIFY_API = "https://api.spotify.com/v1"
@@ -239,3 +181,12 @@ def search(q: str, limit: int = 20):
 def embed():
     # ponytail: 等 Ollama bge-m3 部署後實作
     raise HTTPException(503, "Ollama not yet deployed")
+
+
+# ── Studio API ───────────────────────────────────────────────────────────────
+
+@app.get("/tracks")
+def list_tracks(session: Session = Depends(get_session)):
+    total = session.exec(select(func.count()).select_from(Track)).one()
+    tracks = session.exec(select(Track).order_by(col(Track.added_at).desc())).all()
+    return {"total": total, "items": [t.model_dump() for t in tracks]}

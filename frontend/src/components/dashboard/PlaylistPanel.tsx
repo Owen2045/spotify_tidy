@@ -19,16 +19,14 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  X
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { fetchWithAuth } from "@/lib/auth"
-import { type Playlist } from "@/app/page"
+import { type Playlist } from "@/app/services/spotify/page"
 
 export type TrackItem = {
   id: string
@@ -38,9 +36,6 @@ export type TrackItem = {
   uri: string
 }
 
-// -----------------------------------------------------------------------------
-// Shadcn-UI: DataTableColumnHeader (原生格式的首部排序按鈕)
-// -----------------------------------------------------------------------------
 const DataTableColumnHeader = ({ column, title }: { column: any; title: string }) => {
   if (!column.getCanSort()) {
     return <div className="text-xs font-bold text-muted-foreground">{title}</div>
@@ -101,17 +96,11 @@ export const columns: ColumnDef<TrackItem>[] = [
   {
     accessorKey: "artists",
     header: ({ column }) => <DataTableColumnHeader column={column} title="藝人" />,
-    // cell: ({ row }) => <div className="truncate max-w-[150px]" title={row.getValue("artist")}>{row.getValue("artist")}</div>
-
-    cell: ({ row }) => {
-      console.log("artists:", row.getValue("artists"))
-      return (
-        <div className="truncate max-w-[150px]" title={row.getValue("artists")}>
-          {row.getValue("artists")}
-        </div>
-      )
-    }
-
+    cell: ({ row }) => (
+      <div className="truncate max-w-[150px]" title={row.getValue("artists")}>
+        {row.getValue("artists")}
+      </div>
+    ),
   },
   {
     accessorKey: "album",
@@ -155,9 +144,6 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
     loadTracks()
   }, [playlist])
 
-  // -----------------------------------------------------------------------------
-  // 事件處理：寫入與刪除
-  // -----------------------------------------------------------------------------
   const handleTransfer = () => {
     const selectedRows = table.getSelectedRowModel().rows
     if (!targetPlaylist || selectedRows.length === 0) return
@@ -175,8 +161,7 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
     fetchWithAuth(endpoint, {
       method: "POST",
       body: JSON.stringify(payload)
-    }).then(res => res.json()).then(resData => {
-      console.log(`Transfer to ${targetPlaylist.name}:`, resData)
+    }).then(res => res.json()).then(() => {
       setRowSelection({})
     }).catch(console.error)
   }
@@ -202,8 +187,7 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
     fetchWithAuth(endpoint, {
       method: "POST",
       body: JSON.stringify(payload)
-    }).then(res => res.json()).then(resData => {
-      console.log(`Delete from ${playlist.name}:`, resData)
+    }).then(res => res.json()).then(() => {
       if (playlist.id === "liked") {
         setData(prev => prev.filter(t => !keysToRemove.includes(t.id)))
       } else {
@@ -228,7 +212,6 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
   })
 
   const records = table.getRowModel().rows
-  const isFiltered = table.getState().columnFilters.length > 0;
 
   return (
     <Card
@@ -266,10 +249,6 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
           </Button>
         </div>
 
-
-        {/* ----------------------------------------------------------------------------- */}
-        {/* Shadcn Table Core (黏性標頭與乾淨的列身) */}
-        {/* ----------------------------------------------------------------------------- */}
         <div className="flex-1 rounded-md border overflow-y-auto relative min-h-0 bg-background/50 shadow-sm">
           <Table className="table-fixed w-full">
             <TableHeader className="bg-muted/80 sticky top-0 z-10 backdrop-blur-md">
@@ -308,9 +287,6 @@ export function PlaylistPanel({ side, isActive, playlist, targetPlaylist, onClic
           </Table>
         </div>
 
-        {/* ----------------------------------------------------------------------------- */}
-        {/* Shadcn Datatable Pagination (帶有換頁箭頭與多寡選單的底部) */}
-        {/* ----------------------------------------------------------------------------- */}
         <div className="flex-none flex items-center justify-between px-1 py-1 mt-auto">
           <div className="flex-1 text-[13px] font-medium text-muted-foreground">
             已選 {Object.keys(rowSelection).length} / {table.getFilteredRowModel().rows.length} 筆
