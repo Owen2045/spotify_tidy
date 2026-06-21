@@ -77,6 +77,15 @@ export default function Lobby() {
             <p className="text-sm text-muted-foreground">後台資料管理</p>
             <Button variant="outline" onClick={() => router.push("/services/studio")}>進入</Button>
           </div>
+
+          <div className="border border-border rounded-lg p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="font-medium">語意搜尋</span>
+            </div>
+            <p className="text-sm text-muted-foreground">描述情境，找出最符合的歌曲</p>
+            <Button variant="outline" onClick={() => router.push("/services/search")}>進入</Button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import os
 import requests
 import spotipy
-from typing import List, Dict, Annotated
+from typing import List, Dict, Optional, Annotated
 
 from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -153,3 +153,26 @@ def liked_add(payload: IdsPayload, user_id: str = Depends(require_auth)):
 def liked_remove(payload: IdsPayload, user_id: str = Depends(require_auth)):
     get_spotify(user_id).current_user_saved_tracks_delete(tracks=payload.ids)
     return {"removed": len(payload.ids)}
+
+
+# ── 播放控制 ──────────────────────────────────────────────
+
+@app.get("/spotify/player/devices")
+def player_devices(user_id: str = Depends(require_auth)):
+    result = get_spotify(user_id).devices()
+    return result.get("devices", [])
+
+
+class PlayPayload(BaseModel):
+    uris: List[TrackURI] = Field(min_length=1, max_length=100)
+    device_id: Optional[str] = None
+
+
+@app.post("/spotify/player/play")
+def player_play(payload: PlayPayload, user_id: str = Depends(require_auth)):
+    sp = get_spotify(user_id)
+    try:
+        sp.start_playback(device_id=payload.device_id, uris=payload.uris)
+    except spotipy.exceptions.SpotifyException as e:
+        raise HTTPException(status_code=e.http_status or 400, detail=str(e))
+    return {"playing": len(payload.uris)}

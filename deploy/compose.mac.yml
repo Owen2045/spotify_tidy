@@ -7,42 +7,31 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # 將本機的 frontend 資料夾原始碼掛載進去，支援 Hot Reload
       - ../frontend:/app
-      # 保護容器內的 node_modules 不被本機覆蓋 (這在雙軌制中極度重要)
       - /app/node_modules
     environment:
-      # 告訴 Next.js 前端，API Server 的真實位置 (實體部署請換成對應 IP)
       - NEXT_PUBLIC_API_BASE=http://localhost
-    # 保護機制：若掛載後發現毫無套件，先裝套件再跑伺服器 (支援 0.0.0.0)
     command: >
       sh -c "if [ ! -d 'node_modules' ] && [ -f 'package.json' ]; then npm install; fi && npm run dev -- -H 0.0.0.0"
     restart: unless-stopped
     networks:
       - dev-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
-  traefik:
-    image: traefik:v3.0
-    container_name: spotify_traefik_dev
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=dev-network"
-      - "--entrypoints.web.address=:80"
+  nginx:
+    image: nginx:alpine
+    container_name: spotify_nginx_mac
     ports:
       - "80:80"
-      - "8080:8080"
     volumes:
-      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ./nginx.mac.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - auth
+      - spotify
+      - nlp
+    restart: unless-stopped
     networks:
       - dev-network
-    restart: unless-stopped
 
   spotify:
     build:
@@ -66,11 +55,6 @@ services:
     restart: unless-stopped
     networks:
       - dev-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.spotify.rule=PathPrefix(`/spotify`)"
-      - "traefik.http.routers.spotify.entrypoints=web"
-      - "traefik.http.services.spotify.loadbalancer.server.port=8002"
 
   auth:
     build:
@@ -95,11 +79,15 @@ services:
     restart: unless-stopped
     networks:
       - dev-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.auth.rule=PathPrefix(`/auth`)"
-      - "traefik.http.routers.auth.entrypoints=web"
-      - "traefik.http.services.auth.loadbalancer.server.port=8001"
+
+  redis:
+    image: redis:alpine
+    container_name: spotify_redis_dev
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - dev-network
 
   nlp:
     build:
@@ -116,19 +104,44 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - AUTH_SERVICE_URL=http://auth:8001
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     command: >
       sh -c "if [ -f requirements.txt ]; then pip install -r requirements.txt; fi && uvicorn main:app --host 0.0.0.0 --port 8003 --reload"
     restart: unless-stopped
     networks:
       - dev-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.nlp.rule=PathPrefix(`/nlp`) || PathPrefix(`/studio`)"
-      - "traefik.http.routers.nlp.entrypoints=web"
-      - "traefik.http.services.nlp.loadbalancer.server.port=8003"
+
+  nlp-worker:
+    build:
+      context: ../services/nlp
+      dockerfile: Dockerfile
+    container_name: spotify_nlp_worker
+    volumes:
+      - ../services/nlp:/app
+      - ${LOG_PATH}:/logs
+    env_file:
+      - .env.dev
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - AUTH_SERVICE_URL=http://auth:8001
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "if [ -f requirements.txt ]; then pip install -r requirements.txt; fi && arq worker.WorkerSettings"
+    restart: unless-stopped
+    networks:
+      - dev-network
 
   postgres:
     image: pgvector/pgvector:pg16
@@ -153,4 +166,3 @@ services:
 networks:
   dev-network:
     driver: bridge
-

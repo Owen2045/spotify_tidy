@@ -8,3 +8,4 @@ pgvector
 openai
 sqladmin
 itsdangerous
+arq

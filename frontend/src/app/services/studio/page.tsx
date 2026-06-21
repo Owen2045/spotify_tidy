@@ -167,9 +167,12 @@ export default function StudioPage() {
   const [data, setData] = useState<Track[]>([])
   const [total, setTotal] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState("")
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [search, setSearch] = useState("")
   const [sorting, setSorting] = useState<SortingState>([])
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({ description: false })
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(INITIAL_COLUMN_ORDER)
   const [showColPicker, setShowColPicker] = useState(false)
   const colPickerRef = useRef<HTMLDivElement>(null)
@@ -191,11 +194,63 @@ export default function StudioPage() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
+  useEffect(() => {
+    return () => { if (syncIntervalRef.current) clearInterval(syncIntervalRef.current) }
+  }, [])
+
+  const startPolling = (userId: string) => {
+    if (syncIntervalRef.current) clearInterval(syncIntervalRef.current)
+    syncIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetchWithAuth(`/nlp/sync/progress/${userId}`)
+        const p = await res.json()
+        if (p.status === "done") {
+          clearInterval(syncIntervalRef.current!)
+          syncIntervalRef.current = null
+          setSyncMsg(`同步完成，新增 ${p.done} 首`)
+          setIsSyncing(false)
+          loadTracks()
+        } else if (p.status === "error") {
+          clearInterval(syncIntervalRef.current!)
+          syncIntervalRef.current = null
+          setSyncMsg("同步失敗")
+          setIsSyncing(false)
+        } else if (p.status === "running") {
+          setSyncMsg(`同步中... 已新增 ${p.done} 首`)
+        }
+      } catch { /* ignore polling errors */ }
+    }, 2000)
+  }
+
+  const handleSync = async () => {
+    const token = getToken()
+    if (!token) return
+    let userId: string
+    try {
+      userId = JSON.parse(atob(token.split(".")[1])).sub
+    } catch {
+      setSyncMsg("無法取得使用者 ID"); return
+    }
+    setIsSyncing(true)
+    setSyncMsg("準備同步...")
+    try {
+      const res = await fetchWithAuth(`/nlp/sync/${userId}`, { method: "POST" })
+      const d = await res.json()
+      if (d.status === "already_running") {
+        setSyncMsg("同步中...")
+      }
+      startPolling(userId)
+    } catch {
+      setSyncMsg("同步失敗")
+      setIsSyncing(false)
+    }
+  }
+
   const loadTracks = () => {
     setIsLoading(true)
     fetchWithAuth("/nlp/tracks")
       .then(res => res.json())
-      .then(d => { setData(d.items); setTotal(d.total) })
+      .then(d => { setData(Array.isArray(d.items) ? d.items : []); setTotal(d.total ?? 0) })
       .catch(console.error)
       .finally(() => setIsLoading(false))
   }
@@ -238,6 +293,7 @@ export default function StudioPage() {
           <div className="flex items-center gap-2">
             <h2 className="text-base font-semibold">Studio</h2>
             <span className="text-sm text-muted-foreground">{isLoading ? "載入中..." : `${total} 首`}</span>
+            {syncMsg && <span className="text-xs text-muted-foreground">{syncMsg}</span>}
           </div>
           <div className="flex items-center gap-2">
             <input
@@ -263,15 +319,18 @@ export default function StudioPage() {
                 </div>
               )}
             </div>
-            <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={loadTracks} disabled={isLoading}>
+            <Button variant="secondary" size="sm" className="h-8 text-xs" onClick={loadTracks} disabled={isLoading || isSyncing}>
               🔄 重整
+            </Button>
+            <Button variant="default" size="sm" className="h-8 text-xs" onClick={handleSync} disabled={isSyncing || isLoading}>
+              {isSyncing ? "同步中..." : "⬇ 同步 Spotify"}
             </Button>
           </div>
         </div>
 
         {/* Table */}
         <div className="flex-1 rounded-md border overflow-auto min-h-0 bg-background shadow-sm">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext id="studio-dnd" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <table className="w-full text-sm">
               <thead>
                 {table.getHeaderGroups().map(hg => (

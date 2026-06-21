@@ -32,6 +32,9 @@ SCOPES = " ".join([
     "playlist-modify-public",
     "user-library-read",
     "user-library-modify",
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing",
 ])
 
 sp_oauth = SpotifyOAuth(

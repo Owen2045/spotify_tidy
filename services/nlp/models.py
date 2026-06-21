@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from typing import List, Optional
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, Column, Text
 from sqlmodel import Field, SQLModel
 
@@ -17,7 +18,9 @@ class Track(SQLModel, table=True):
     explicit: bool = Field(default=False)
     added_at: Optional[datetime] = None
     description: Optional[str] = None
-    # embedding: vector(1024) 在 DB 裡，Python 側暫不對應，等 Ollama 上線後補
+    embedding: Optional[List[float]] = Field(
+        default=None, sa_column=Column(Vector(1024), nullable=True)
+    )
 
 
 class TrackGenre(SQLModel, table=True):
