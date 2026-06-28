@@ -99,6 +99,7 @@ services:
     volumes:
       - ../services/nlp:/app
       - ${LOG_PATH}:/logs
+      - /Users/owen/.cache/huggingface:/root/.cache/huggingface
     env_file:
       - .env.dev
     environment:
@@ -125,6 +126,7 @@ services:
     volumes:
       - ../services/nlp:/app
       - ${LOG_PATH}:/logs
+      - /Users/owen/.cache/huggingface:/root/.cache/huggingface
     env_file:
       - .env.dev
     environment:
